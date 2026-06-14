@@ -1,0 +1,10 @@
+node_modules/
+
+# generated data — recreate with `npm run gen-data`
+data/*.csv
+data/snapshot.csv
+
+*.log
+.DS_Store
+.env
+npm-debug.log*

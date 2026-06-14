@@ -1,0 +1,20 @@
+{
+  "name": "search-typeahead-system",
+  "version": "1.0.0",
+  "description": "A search typeahead system with a trie prefix index, a distributed cache using consistent hashing, recency-aware trending, and batched writes.",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "gen-data": "node scripts/generateDataset.js",
+    "bench": "node scripts/benchmark.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "license": "MIT"
+}
