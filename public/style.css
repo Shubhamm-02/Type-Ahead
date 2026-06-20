@@ -1,0 +1,68 @@
+/* Minimal, clean styling. No framework so setup stays trivial. */
+:root {
+  --bg: #0f1221;
+  --card: #1a1f37;
+  --accent: #6c8cff;
+  --text: #e8ebff;
+  --muted: #9aa3c7;
+  --hit: #34d399;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, system-ui, Segoe UI, Roboto, sans-serif;
+  background: radial-gradient(1200px 600px at 50% -10%, #1c2348, var(--bg));
+  color: var(--text);
+  min-height: 100vh;
+}
+.wrap { max-width: 680px; margin: 0 auto; padding: 48px 20px 80px; }
+h1 { margin: 0 0 4px; font-size: 30px; }
+.sub { color: var(--muted); margin: 0 0 28px; }
+
+.search-box { position: relative; display: flex; gap: 8px; }
+#search {
+  flex: 1; padding: 14px 16px; font-size: 17px; border-radius: 12px;
+  border: 1px solid #2a335f; background: var(--card); color: var(--text);
+  outline: none;
+}
+#search:focus { border-color: var(--accent); }
+#go {
+  padding: 0 20px; border: none; border-radius: 12px; cursor: pointer;
+  background: var(--accent); color: white; font-weight: 600; font-size: 15px;
+}
+#go:hover { filter: brightness(1.08); }
+
+.suggestions {
+  position: absolute; top: 56px; left: 0; right: 92px; z-index: 10;
+  margin: 0; padding: 6px; list-style: none; background: var(--card);
+  border: 1px solid #2a335f; border-radius: 12px;
+  box-shadow: 0 18px 40px rgba(0,0,0,.45);
+}
+.suggestions li {
+  display: flex; justify-content: space-between; gap: 12px;
+  padding: 10px 12px; border-radius: 8px; cursor: pointer;
+}
+.suggestions li .count { color: var(--muted); font-variant-numeric: tabular-nums; }
+.suggestions li.active, .suggestions li:hover { background: #283163; }
+.suggestions li .q b { color: var(--accent); font-weight: 700; }
+
+.status { margin: 16px 2px; min-height: 22px; color: var(--muted); font-size: 14px; }
+.status.ok { color: var(--hit); }
+.status.err { color: #ff8080; }
+
+.trending { margin-top: 40px; background: var(--card);
+  border: 1px solid #2a335f; border-radius: 16px; padding: 20px 22px; }
+.trending-head { display: flex; align-items: center; justify-content: space-between; }
+.trending-head h2 { margin: 0; font-size: 18px; }
+.toggle button {
+  background: transparent; border: 1px solid #2a335f; color: var(--muted);
+  padding: 5px 10px; border-radius: 8px; cursor: pointer; font-size: 13px;
+}
+.toggle button.active { background: var(--accent); color: white; border-color: var(--accent); }
+.trending-list { margin: 14px 0 0; padding-left: 22px; }
+.trending-list li { padding: 6px 0; cursor: pointer; }
+.trending-list li:hover { color: var(--accent); }
+.trending-list .score { color: var(--muted); font-size: 12px; margin-left: 8px; }
+
+.foot { margin-top: 28px; color: var(--muted); font-size: 13px; }
+.foot a { color: var(--accent); }
