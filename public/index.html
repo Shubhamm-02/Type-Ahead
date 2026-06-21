@@ -3,48 +3,45 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Search Typeahead</title>
+  <title>Search</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <main class="wrap">
-    <h1>🔎 Search Typeahead</h1>
-    <p class="sub">Start typing, suggestions are ranked by search popularity.</p>
+  <main class="page">
+    <h1 class="wordmark">Search</h1>
 
-    <div class="search-box">
-      <!-- aria-* + role=combobox makes the dropdown accessible & keyboard-friendly -->
+    <div class="search-box" id="searchBox">
+      <span class="search-leading" aria-hidden="true"></span>
       <input
         id="search"
         type="text"
-        placeholder="Try: iphone, java, pizza…"
+        placeholder="Search products, tutorials, places"
         autocomplete="off"
         role="combobox"
         aria-expanded="false"
         aria-controls="suggestions"
         aria-autocomplete="list" />
-      <button id="go">Search</button>
+      <button id="go" class="search-go" title="Search">Search</button>
 
-      <!-- Suggestion dropdown -->
       <ul id="suggestions" class="suggestions" role="listbox" hidden></ul>
     </div>
 
-    <!-- Status line: loading / error / "Searched" responses -->
     <div id="status" class="status" aria-live="polite"></div>
 
-    <section class="trending">
+    <section class="trending" aria-label="Trending searches">
       <div class="trending-head">
-        <h2>🔥 Trending</h2>
-        <div class="toggle">
-          <button data-mode="enhanced" class="active">Recent</button>
-          <button data-mode="basic">All-time</button>
+        <h2>Trending</h2>
+        <div class="segmented" role="tablist">
+          <button data-mode="enhanced" class="active" role="tab">Now</button>
+          <button data-mode="basic" role="tab">All time</button>
         </div>
       </div>
       <ol id="trending-list" class="trending-list"></ol>
     </section>
 
     <footer class="foot">
-      <a href="/metrics" target="_blank">/metrics</a> ·
       <span id="meta"></span>
+      <a href="/metrics" target="_blank" rel="noopener">Metrics</a>
     </footer>
   </main>
 

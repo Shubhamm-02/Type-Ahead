@@ -44,7 +44,7 @@ async function fetchSuggestions(q) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     renderSuggestions(data.suggestions, q);
-    setStatus(`Served from ${data.source}${data.node ? ' · ' + data.node : ''}`, 'ok');
+    setStatus(`Served from ${data.source}${data.node ? ' · ' + data.node : ''}`);
   } catch (err) {
     setStatus(`Error: ${err.message}`, 'err');
     renderSuggestions([], q);
@@ -144,7 +144,7 @@ async function submitSearch(query) {
       body: JSON.stringify({ q: query }),
     });
     const data = await res.json();
-    setStatus(`✓ ${data.message}: "${query}"`, 'ok');
+    setStatus(`${data.message}: "${query}"`);
     // Trending updates after the buffer flushes; refresh shortly after.
     setTimeout(loadTrending, 400);
   } catch (err) {
@@ -161,9 +161,9 @@ async function loadTrending() {
     const data = await res.json();
     trendingList.innerHTML = (data.trending || []).map((t) => `
       <li data-q="${encodeURIComponent(t.query)}">
-        ${t.query}
-        <span class="score">${trendingMode === 'enhanced' ? '🔥 ' + t.score : '#' + t.total.toLocaleString()}</span>
-      </li>`).join('') || '<li class="score">No trending data yet — try searching!</li>';
+        <span class="label">${t.query}</span>
+        <span class="score">${trendingMode === 'enhanced' ? 'score ' + t.score : t.total.toLocaleString() + ' searches'}</span>
+      </li>`).join('') || '<li class="empty">No trending data yet. Try a search.</li>';
     [...trendingList.children].forEach((li) => {
       if (!li.dataset.q) return;
       li.addEventListener('click', () => {
