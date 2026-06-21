@@ -84,45 +84,33 @@ export class TrendingTracker {
 
   /**
    * ENHANCED SUGGESTION RANKING (the §7 "20% marks" requirement).
-   * Re-rank a prefix's candidate pool by blending all-time popularity with
-   * recent activity, so a recently-searched query gets higher priority in the
-   * SAME /suggest API — without re-sorting a separate leaderboard.
+   * Re-rank a prefix's candidates by blending popularity with recency, so a
+   * recently-searched query gets higher priority in the SAME /suggest API.
    *
-   *   score(q) = (1 - W) * normCount(q) + W * normHeat(q)
+   *     score(q) = count(q) * (1 + heat(q))
    *
-   * normCount / normHeat are min-max normalized WITHIN the candidate pool, so
-   * the two very different scales (counts in the millions, decayed heat in the
-   * tens) become comparable. W is the recency weight (freshness vs. stability
-   * trade-off; default 0.5).
+   * where heat(q) is the query's recent-search heat decayed to now (see
+   * record()). Plain-English intuition:
+   *  - nobody searched it recently -> heat = 0 -> score = count -> this is just
+   *    the basic (count) order, so enhanced is a safe superset of basic;
+   *  - a recently-hot query gets a boost proportional to how hot it is;
+   *  - because we MULTIPLY by the query's own count, a quick burst on an obscure
+   *    query can't top the list — it must be BOTH popular-ish AND recently
+   *    active. Combined with decay (heat fades once searches stop), this is how
+   *    we avoid permanently over-ranking a short-lived spike.
    *
-   * Why this satisfies the spec's required explanations:
-   *  - recency is tracked as decayed `heat` (see record(): sqrt-dampened, halves
-   *    every half-life);
-   *  - recent activity raises normHeat, lifting that query's blended score;
-   *  - a short-lived spike CANNOT permanently over-rank: its heat decays back to
-   *    ~0, so the blend falls back to pure count order over time;
-   *  - it runs LIVE on the cached count-pool, so no cache invalidation is needed
-   *    when only recency (not counts) changes.
-   *
-   * Returns the re-sorted [{query, count}] (heat/score stripped) so the
-   * /suggest response shape is unchanged. With no recent activity, normHeat is
-   * 0 for all and this gracefully reduces to basic (count) order.
+   * Runs LIVE on the cached count-pool, so recency changes need no cache
+   * invalidation. Returns re-sorted [{query, count}] (score stripped) so the
+   * /suggest response shape is unchanged.
    */
-  rankByRecency(candidates, now = Date.now(), W = 0.5) {
+  rankByRecency(candidates, now = Date.now()) {
     if (!candidates || candidates.length === 0) return [];
     const scored = candidates.map((c) => {
       const h = this.heat.get(c.query);
       const heat = h ? h.heat * this._decayFactor(now - h.lastTs) : 0;
-      return { query: c.query, count: c.count, heat };
+      return { query: c.query, count: c.count, score: c.count * (1 + heat) };
     });
-    const maxCount = Math.max(...scored.map((c) => c.count), 1);
-    const maxHeat = Math.max(...scored.map((c) => c.heat), 1e-9);
-    for (const c of scored) {
-      const normCount = c.count / maxCount;
-      const normHeat = c.heat / maxHeat;
-      c.score = (1 - W) * normCount + W * normHeat;
-    }
-    scored.sort((a, b) => b.score - a.score || b.count - a.count);
+    scored.sort((a, b) => b.score - a.score);
     return scored.map(({ query, count }) => ({ query, count }));
   }
 

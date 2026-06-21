@@ -329,23 +329,23 @@ Heat is "cooled" lazily — we only apply decay the next time we touch the query
 so there's **no background job** sweeping millions of rows.
 
 **2) How recent activity affects ranking.** `rankByRecency()` re-ranks a
-prefix's candidate pool by blending popularity and recency, min-max normalized
-*within the pool* so the two scales (counts in millions, heat in tens) compare:
+prefix's candidates by multiplying popularity by a recency boost:
 
 ```
-score(q) = (1 - W) * normCount(q) + W * normHeat(q)       // W = 0.5
+score(q) = count(q) * (1 + heat(q))
 ```
 
-Recent activity raises `normHeat`, lifting that query's blended score. With no
-recent activity, `normHeat` is 0 for all and this **reduces to basic (count)
-order** — so enhanced is a strict, safe superset of basic.
+`heat(q)` is the query's recent-search heat decayed to now. No recent activity →
+`heat = 0` → `score = count` → exactly the basic (count) order, so enhanced is a
+strict, safe **superset** of basic. A recently-hot query gets a boost
+proportional to how hot it is.
 
-**3) How short-term spikes are prevented from permanently over-ranking.** Three
-defenses: (a) **decay** — a spike's heat falls back to ~0, so the blend returns
-to count order on its own; (b) **sqrt dampening** — `N` searches add only `√N`
-heat, so doubling spam adds ~1.4× heat; (c) the score is a **blend** with count,
-so a one-hit obscure query can't bury `iphone`. (A hard per-window cap is a
-documented alternative; we prefer the smooth `sqrt`.)
+**3) How short-term spikes are prevented from permanently over-ranking.** Two
+things: (a) **decay** — a spike's heat fades back to ~0 once searches stop, so
+the ranking returns to count order on its own; (b) we **multiply by the query's
+own count**, so a quick burst on an obscure query can't top the list — it has to
+be *both* reasonably popular *and* recently active. (`record()` also softens big
+bursts with a `√N` increment, an optional extra dampener.)
 
 **4) How the cache is updated/invalidated when rankings change.** The cache
 stores the **stable, count-ranked candidate pool** for a prefix — it changes
@@ -355,12 +355,12 @@ recency drift (heat decaying between flushes) needs **no cache invalidation at
 all**. This cleanly separates "what to cache" (stable counts) from "how to rank"
 (live recency).
 
-**5) Trade-offs (freshness / latency / complexity).** `W` is the dial: higher =
-fresher but jumpier, lower = more stable. Latency cost is tiny — enhanced sorts
-only the ~20-item cached pool per request, so reads stay sub-millisecond.
-Complexity is bounded by the pool size: enhanced can only promote a query that's
-*both* reasonably popular and recently active, which is also a sensible product
-rule (it won't surface a single-search nobody-query).
+**5) Trade-offs (freshness / latency / complexity).** The **half-life** is the
+dial: a shorter half-life = fresher but jumpier, longer = more stable. Latency
+cost is tiny — enhanced sorts only the ~20-item cached pool per request, so reads
+stay sub-millisecond. Complexity is bounded by the pool size: enhanced can only
+promote a query that's *both* reasonably popular and recently active, which is
+also a sensible product rule (it won't surface a single-search nobody-query).
 
 **Supporting demo — `GET /trending?mode=basic|enhanced`.** A small global
 leaderboard that visualizes the *same two philosophies* (all-time count vs.
