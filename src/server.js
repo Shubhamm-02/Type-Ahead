@@ -87,6 +87,9 @@ function boot() {
   console.log(`Loading dataset from ${path.basename(source)} ...`);
   const t0 = Date.now();
   const { unique } = store.loadCSV(source);
+  // Materialize the in-memory serving index (the trie) from the primary store.
+  // Layering on a cache miss is: cache -> trie index -> (durable) store. The
+  // store stays the source of truth; the trie is rebuilt from it on every boot.
   for (const [query, count] of store.map) {
     trie.set(query, count);
     trending.seedTotals(query, count);
@@ -111,7 +114,8 @@ app.get('/suggest', (req, res) => {
   if (cached.status === 'hit') {
     return res.json({ query: q, source: 'cache', node: cached.node, suggestions: cached.value });
   }
-  // MISS -> compute from the trie, then populate the cache (cache-aside).
+  // MISS -> compute from the trie (the in-memory index built from the primary
+  // store), then populate the cache (cache-aside). No disk/DB hit on this path.
   const suggestions = trie.suggest(q, 10);
   cache.set(q, suggestions);
   res.json({ query: q, source: 'trie', node: cached.node, suggestions });
