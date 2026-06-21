@@ -21,6 +21,23 @@ let activeIndex = -1;   // which suggestion is highlighted (keyboard nav)
 let trendingMode = 'enhanced';
 
 /* ---------------------------------------------------------------------------
+ * LOCAL SEARCH HISTORY
+ * --------------------
+ * We remember (in the browser, via localStorage) which queries THIS user has
+ * submitted before, purely so we can show a clock/history icon next to them in
+ * the dropdown — exactly like a real search engine. It's a per-user UI cue and
+ * deliberately client-side: the server keeps no per-user data.
+ * ------------------------------------------------------------------------- */
+const HISTORY_KEY = 'typeahead.history';
+const searchedBefore = new Set(JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'));
+function rememberSearch(q) {
+  searchedBefore.add(q);
+  // keep the most recent 200 to bound storage
+  try { localStorage.setItem(HISTORY_KEY, JSON.stringify([...searchedBefore].slice(-200))); }
+  catch { /* storage full / disabled — non-critical */ }
+}
+
+/* ---------------------------------------------------------------------------
  * DEBOUNCING
  * ----------
  * A fast typist fires ~10 keystrokes/second. Calling /suggest on each one is
@@ -73,11 +90,16 @@ function renderSuggestions(items, prefix) {
     input.setAttribute('aria-expanded', 'false');
     return;
   }
-  list.innerHTML = suggestions.map((s, i) => `
+  list.innerHTML = suggestions.map((s, i) => {
+    // clock icon if the user has searched this before, magnifier otherwise
+    const kind = searchedBefore.has(s.query) ? 'history' : 'search';
+    return `
     <li role="option" data-i="${i}" id="opt-${i}">
+      <span class="s-icon ${kind}" aria-hidden="true"></span>
       <span class="q">${highlight(s.query, prefix)}</span>
       <span class="count">${s.count.toLocaleString()}</span>
-    </li>`).join('');
+    </li>`;
+  }).join('');
   list.hidden = false;
   input.setAttribute('aria-expanded', 'true');
 
@@ -145,6 +167,7 @@ async function submitSearch(query) {
       body: JSON.stringify({ q: query }),
     });
     const data = await res.json();
+    rememberSearch(query); // so it shows a history icon next time
     setStatus(`${data.message}: "${query}"`);
     // Trending updates after the buffer flushes; refresh shortly after.
     setTimeout(loadTrending, 400);
