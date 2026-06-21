@@ -74,7 +74,7 @@ npm run bench
 | Increment existing / insert new query | `src/store.js` + `trie.js` | 4.2 |
 | Cache-before-DB with TTL + invalidation | `src/cache.js` | 6 |
 | Distributed cache nodes + consistent hashing | `src/cache.js` + `consistentHashing.js` | 6 |
-| Trending: total-count **and** recency-weighted | `src/trending.js` | 7 |
+| Trending: `/suggest?rank=basic\|enhanced` (recency-aware) | `src/trending.js` | 7 |
 | Batch writes (buffer, aggregate, flush) | `src/writeBuffer.js` | 8 |
 | Metrics: p95, hit rate, DB reads/writes | `src/metrics.js`, `GET /metrics` | 10 |
 
@@ -297,45 +297,76 @@ nothing is lost.
 
 ---
 
-### 6. Trending searches
+### 6. Trending / recency-aware ranking
 
 **File:** `src/trending.js`
 
-"Trending" should mean **hot right now**, not "most searched ever" (that list
-never changes — `iphone` wins forever).
+The spec wants the **same suggestion API** to support two rankings — recency is
+folded *into* `/suggest`, not bolted on as a separate feature:
 
-- **Basic (rubric 60%):** rank by **total count** → `GET /trending?mode=basic`.
-- **Enhanced (rubric 20%):** blend in **recency** using **exponential time
-  decay** → `GET /trending?mode=enhanced`.
+- **Basic (rubric 60%):** `GET /suggest?q=<prefix>&rank=basic` — sort the prefix
+  matches by **overall count**. Historically popular queries appear first.
+- **Enhanced (rubric 20%):** `GET /suggest?q=<prefix>&rank=enhanced` — re-rank
+  the same matches with a **recency-aware** score, so a query that's hot *right
+  now* gets higher priority. The UI uses `rank=enhanced` by default.
 
-> **Analogy.** Trending is a glowing **ember**. Every search throws a spark on it
-> (heat up). Left alone, it cools on its own. A query searched a lot in the last
-> few minutes is white-hot; one popular last week has cooled.
+> **Analogy.** A query's recency is a glowing **ember**. Every search throws a
+> spark on it (heat up). Left alone it cools on its own. A query searched a lot
+> in the last few minutes is white-hot; one popular last week has cooled.
 
-We keep one number per query, its **heat**. On each search:
+The spec asks us to clearly explain five things — here they are:
+
+**1) How recent searches are tracked.** One number per query, its **heat**. On
+each search (applied per batch flush):
 
 ```
 heat = heat * decay(timeSinceLastUpdate) + increment
 where  decay(dt) = 0.5 ^ (dt / halfLife)      // halfLife = 10 min
+       increment = sqrt(searchesInThisBatch)  // dampened, see #3
 ```
 
-So after one half-life with no activity, a query's heat halves. No background
-job is needed — we "cool" a query lazily the next time we touch it or read the
-leaderboard.
+Heat is "cooled" lazily — we only apply decay the next time we touch the query,
+so there's **no background job** sweeping millions of rows.
 
-**Preventing short-term spikes from dominating** (a bot hammering one query):
-1. **sqrt dampening:** a batch of `N` searches adds `√N` heat, not `N`. Doubling
-   the spam adds only ~1.4× heat → sharply diminishing returns.
-2. **Half-life tuning:** a moderate half-life means a spike fades quickly;
-   sustained interest is what keeps heat high.
-3. *(documented alternative)* a hard per-window cap. We prefer the smooth `sqrt`
-   curve.
+**2) How recent activity affects ranking.** `rankByRecency()` re-ranks a
+prefix's candidate pool by blending popularity and recency, min-max normalized
+*within the pool* so the two scales (counts in millions, heat in tens) compare:
 
-**Cache strategy for trending:** the leaderboard changes constantly, so we don't
-cache it with a long TTL (that would serve stale data). We recompute the top-N
-on read (a cheap partial sort of a modest map). At larger scale we'd cache the
-computed top-N for a **short** TTL (~5s) — fresh enough for "trending", cheap to
-refresh.
+```
+score(q) = (1 - W) * normCount(q) + W * normHeat(q)       // W = 0.5
+```
+
+Recent activity raises `normHeat`, lifting that query's blended score. With no
+recent activity, `normHeat` is 0 for all and this **reduces to basic (count)
+order** — so enhanced is a strict, safe superset of basic.
+
+**3) How short-term spikes are prevented from permanently over-ranking.** Three
+defenses: (a) **decay** — a spike's heat falls back to ~0, so the blend returns
+to count order on its own; (b) **sqrt dampening** — `N` searches add only `√N`
+heat, so doubling spam adds ~1.4× heat; (c) the score is a **blend** with count,
+so a one-hit obscure query can't bury `iphone`. (A hard per-window cap is a
+documented alternative; we prefer the smooth `sqrt`.)
+
+**4) How the cache is updated/invalidated when rankings change.** The cache
+stores the **stable, count-ranked candidate pool** for a prefix — it changes
+only when *counts* change, and we invalidate exactly the affected prefixes on
+each batch flush. Enhanced re-ranking runs **live on that cached pool**, so
+recency drift (heat decaying between flushes) needs **no cache invalidation at
+all**. This cleanly separates "what to cache" (stable counts) from "how to rank"
+(live recency).
+
+**5) Trade-offs (freshness / latency / complexity).** `W` is the dial: higher =
+fresher but jumpier, lower = more stable. Latency cost is tiny — enhanced sorts
+only the ~20-item cached pool per request, so reads stay sub-millisecond.
+Complexity is bounded by the pool size: enhanced can only promote a query that's
+*both* reasonably popular and recently active, which is also a sensible product
+rule (it won't surface a single-search nobody-query).
+
+**Supporting demo — `GET /trending?mode=basic|enhanced`.** A small global
+leaderboard that visualizes the *same two philosophies* (all-time count vs.
+decayed heat). It's the quickest way to "demonstrate the difference between the
+two ranking approaches using sample data" that the spec asks for, alongside the
+per-prefix `?rank=basic` vs `?rank=enhanced` comparison.
 
 ---
 
@@ -393,14 +424,18 @@ ratio, and the consistent-hashing ring distribution + change log.
 
 ## API documentation
 
-### `GET /suggest?q=<prefix>`
-Returns up to 10 suggestions for a prefix, sorted by count descending.
+### `GET /suggest?q=<prefix>&rank=basic|enhanced`
+Returns up to 10 suggestions for a prefix.
+- `rank=basic` (default) — sorted by **count** descending.
+- `rank=enhanced` — **recency-aware** re-ranking (see §6). The UI uses this.
 ```bash
-curl 'http://localhost:3000/suggest?q=ip'
+curl 'http://localhost:3000/suggest?q=ip'                 # basic (count)
+curl 'http://localhost:3000/suggest?q=ip&rank=enhanced'   # recency-aware
 ```
 ```json
 {
   "query": "ip",
+  "rank": "enhanced",         // which ranking was applied
   "source": "cache",          // "cache" | "trie" | "empty"
   "node": "cache-1",          // which cache node owns this prefix
   "suggestions": [
