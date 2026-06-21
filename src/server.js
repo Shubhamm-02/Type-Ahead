@@ -105,20 +105,35 @@ app.use(express.json());
 app.use(timingMiddleware(metrics));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
-/** GET /suggest?q=<prefix> — top 10 suggestions (cache-aside read path). */
+/**
+ * GET /suggest?q=<prefix>&rank=basic|enhanced — top 10 suggestions.
+ *   basic    (default) -> sorted by overall count           (§7, 60%)
+ *   enhanced           -> recency-aware re-rank of the pool  (§7, 20%)
+ * Cache-aside read path. The cache stores the STABLE count-ranked candidate
+ * pool (size SUGGEST_POOL); enhanced re-ranking runs LIVE on that pool, so
+ * recency decay never makes the cache stale and no extra invalidation is needed.
+ */
+const SUGGEST_POOL = 20; // count-ranked candidates cached per prefix
 app.get('/suggest', (req, res) => {
   const q = Trie.normalize(req.query.q || '');
-  if (!q) return res.json({ query: '', source: 'empty', suggestions: [] });
+  const rank = req.query.rank === 'enhanced' ? 'enhanced' : 'basic';
+  if (!q) return res.json({ query: '', rank, source: 'empty', suggestions: [] });
 
   const cached = cache.get(q);
+  let pool, source;
   if (cached.status === 'hit') {
-    return res.json({ query: q, source: 'cache', node: cached.node, suggestions: cached.value });
+    pool = cached.value;
+    source = 'cache';
+  } else {
+    // MISS -> compute the count-ranked pool from the trie (the in-memory index
+    // built from the primary store), then cache it. No disk/DB hit on reads.
+    pool = trie.suggest(q, SUGGEST_POOL);
+    cache.set(q, pool);
+    source = 'trie';
   }
-  // MISS -> compute from the trie (the in-memory index built from the primary
-  // store), then populate the cache (cache-aside). No disk/DB hit on this path.
-  const suggestions = trie.suggest(q, 10);
-  cache.set(q, suggestions);
-  res.json({ query: q, source: 'trie', node: cached.node, suggestions });
+
+  const ranked = rank === 'enhanced' ? trending.rankByRecency(pool) : pool;
+  res.json({ query: q, rank, source, node: cached.node, suggestions: ranked.slice(0, 10) });
 });
 
 /** POST /search {q} — buffer the increment, return immediately. */

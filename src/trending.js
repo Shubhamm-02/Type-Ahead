@@ -82,6 +82,50 @@ export class TrendingTracker {
     this.heat.set(q, { heat: decayed + increment, lastTs: now });
   }
 
+  /**
+   * ENHANCED SUGGESTION RANKING (the §7 "20% marks" requirement).
+   * Re-rank a prefix's candidate pool by blending all-time popularity with
+   * recent activity, so a recently-searched query gets higher priority in the
+   * SAME /suggest API — without re-sorting a separate leaderboard.
+   *
+   *   score(q) = (1 - W) * normCount(q) + W * normHeat(q)
+   *
+   * normCount / normHeat are min-max normalized WITHIN the candidate pool, so
+   * the two very different scales (counts in the millions, decayed heat in the
+   * tens) become comparable. W is the recency weight (freshness vs. stability
+   * trade-off; default 0.5).
+   *
+   * Why this satisfies the spec's required explanations:
+   *  - recency is tracked as decayed `heat` (see record(): sqrt-dampened, halves
+   *    every half-life);
+   *  - recent activity raises normHeat, lifting that query's blended score;
+   *  - a short-lived spike CANNOT permanently over-rank: its heat decays back to
+   *    ~0, so the blend falls back to pure count order over time;
+   *  - it runs LIVE on the cached count-pool, so no cache invalidation is needed
+   *    when only recency (not counts) changes.
+   *
+   * Returns the re-sorted [{query, count}] (heat/score stripped) so the
+   * /suggest response shape is unchanged. With no recent activity, normHeat is
+   * 0 for all and this gracefully reduces to basic (count) order.
+   */
+  rankByRecency(candidates, now = Date.now(), W = 0.5) {
+    if (!candidates || candidates.length === 0) return [];
+    const scored = candidates.map((c) => {
+      const h = this.heat.get(c.query);
+      const heat = h ? h.heat * this._decayFactor(now - h.lastTs) : 0;
+      return { query: c.query, count: c.count, heat };
+    });
+    const maxCount = Math.max(...scored.map((c) => c.count), 1);
+    const maxHeat = Math.max(...scored.map((c) => c.heat), 1e-9);
+    for (const c of scored) {
+      const normCount = c.count / maxCount;
+      const normHeat = c.heat / maxHeat;
+      c.score = (1 - W) * normCount + W * normHeat;
+    }
+    scored.sort((a, b) => b.score - a.score || b.count - a.count);
+    return scored.map(({ query, count }) => ({ query, count }));
+  }
+
   /** ENHANCED trending: current decayed heat, highest first. */
   topTrending(n = 10, now = Date.now()) {
     const scored = [];

@@ -32,7 +32,10 @@
  *   topK at the final node. O(L) — independent of dataset size.
  */
 
-const K = 10; // we serve at most 10 suggestions
+// We SERVE at most 10 suggestions, but keep a slightly larger candidate pool
+// per node so the enhanced (recency-aware) ranking has head-room to promote a
+// recently-hot query that isn't quite top-10 by raw count. See trending.js.
+const K = 20;
 
 class TrieNode {
   constructor() {
@@ -146,7 +149,7 @@ export class Trie {
    * by count descending. Empty prefix -> [] (we don't suggest on empty input).
    * No match -> []. This is O(prefix length).
    */
-  suggest(rawPrefix, limit = K) {
+  suggest(rawPrefix, limit = 10) {
     const prefix = Trie.normalize(rawPrefix);
     if (!prefix) return [];
     const node = this._nodeForPrefix(prefix);

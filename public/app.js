@@ -40,11 +40,12 @@ async function fetchSuggestions(q) {
   if (!q.trim()) { renderSuggestions([], ''); return; }
   setStatus('Loading…');
   try {
-    const res = await fetch(`/suggest?q=${encodeURIComponent(q)}`);
+    // Use the recency-aware ranking so the product reflects what's trending now.
+    const res = await fetch(`/suggest?q=${encodeURIComponent(q)}&rank=enhanced`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     renderSuggestions(data.suggestions, q);
-    setStatus(`Served from ${data.source}${data.node ? ' · ' + data.node : ''}`);
+    setStatus(`${data.rank} ranking · from ${data.source}${data.node ? ' · ' + data.node : ''}`);
   } catch (err) {
     setStatus(`Error: ${err.message}`, 'err');
     renderSuggestions([], q);
