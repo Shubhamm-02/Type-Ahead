@@ -8,3 +8,6 @@ data/snapshot.csv
 .DS_Store
 .env
 npm-debug.log*
+
+# private viva prep — keep local, never push
+VIVA.md
