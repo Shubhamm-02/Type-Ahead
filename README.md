@@ -1,6 +1,6 @@
 # Search Typeahead System
 
-A search-as-you-type suggestion system — like the dropdown you see on Google,
+A search-as-you-type suggestion system, like the dropdown you see on Google,
 Amazon, or YouTube. As you type a **prefix**, it returns the **top 10 most
 popular queries** that start with it, ranked by how often they've been
 searched. It also records searches, surfaces **trending** queries, serves reads
@@ -8,7 +8,7 @@ from a **distributed cache** spread with **consistent hashing**, and protects
 the database using **batched writes**.
 
 > The focus of this project is the **backend data-system design**: how data is
-> stored, indexed, cached, distributed, and written efficiently — not just a UI.
+> stored, indexed, cached, distributed, and written efficiently, not just a UI.
 
 ---
 
@@ -39,14 +39,14 @@ the database using **batched writes**.
 ## Quick start
 
 **Requirements:** Node.js 18+ (built and tested on Node 22). No database, no
-Redis, nothing else to install — everything runs in one process so local setup
+Redis, nothing else to install, everything runs in one process so local setup
 is trivial.
 
 ```bash
 # 1. install the one dependency (express)
 npm install
 
-# 2. generate the dataset (120,000 queries) — only needed once
+# 2. generate the dataset (120,000 queries): only needed once
 npm run gen-data
 
 # 3. start the server
@@ -117,7 +117,7 @@ npm run bench
 
 ## The two request flows
 
-### Read path — `GET /suggest?q=ip` (must be **fast**)
+### Read path: `GET /suggest?q=ip` (must be **fast**)
 
 1. Normalize the prefix (`lowercase`, `trim`, collapse spaces) so `"IPhone "`,
    `"iphone"`, and `"iPhone"` are the same key.
@@ -128,11 +128,11 @@ npm run bench
    - **MISS** → compute the top-10 from the **trie** (O(prefix length)), store
      the result in the cache (*cache-aside*), and return it.
 
-### Write path — `POST /search {"q":"iphone"}` (must be **cheap**)
+### Write path: `POST /search {"q":"iphone"}` (must be **cheap**)
 
 1. Add `+1` for `"iphone"` to the **write buffer** (in memory). The database is
    **not** touched yet.
-2. Return `{"message":"Searched"}` immediately — the user doesn't wait for a DB
+2. Return `{"message":"Searched"}` immediately, the user doesn't wait for a DB
    write.
 3. Later, when the buffer flushes (either it filled up, or the timer fired):
    - apply the aggregated deltas to the **store** (one write per distinct query),
@@ -161,7 +161,7 @@ prefix.
 > with "ip", you walk to shelf `i` → drawer `p`, and everything in that drawer
 > matches. You never touch unrelated shelves.
 
-**The optimization — top-K at every node.** A plain trie still has to gather and
+**The optimization: top-K at every node.** A plain trie still has to gather and
 sort *all* queries under a prefix. For a short prefix like `"a"` that could be
 thousands. So we cache, at **each node**, that node's own best 10 descendants
 (`topK`).
@@ -171,7 +171,7 @@ thousands. So we cache, at **each node**, that node's own best 10 descendants
 > word if it's a query). Any query in a node's true top-10 lives in exactly one
 > child subtree, and within that *smaller* subtree it can only rank *higher*, so
 > it's guaranteed to appear in that child's top-10. Therefore a node's list can
-> be rebuilt purely from its children — no full subtree scan.
+> be rebuilt purely from its children, no full subtree scan.
 
 **Result.** A lookup is just "walk down the prefix, read the cached list at the
 final node" → **O(prefix length)**, independent of dataset size. On an
@@ -228,7 +228,7 @@ a mass cache miss → a stampede on the database.
 > the rim and **walk clockwise** to the first server you meet. Now add a server:
 > it drops onto the rim and only steals the slice of keys between it and the
 > previous server. Every other key keeps its home. On average only **K/N** keys
-> move when the cluster changes — not all of them.
+> move when the cluster changes, not all of them.
 
 **Virtual nodes.** With only one point per server, the slices come out uneven.
 So each physical server is placed at **many** points (here: **150**). More points
@@ -260,7 +260,7 @@ from it for fast queries. Keeping them separate also lets us count **DB
 reads/writes** to report database load.
 
 > Note: because the trie holds counts in memory, `/suggest` is served entirely
-> by the cache + index and **never reads the DB** — DB read load is essentially
+> by the cache + index and **never reads the DB**: DB read load is essentially
 > zero by design. The DB is touched only by **batched writes**.
 
 ---
@@ -284,14 +284,14 @@ We buffer increments in memory and **aggregate** them: if `"iphone"` is searched
 the biggest savings (the benchmark shows a **300×** reduction).
 
 **Flush triggers (whichever comes first):**
-- **Size** — buffer reaches `maxBatchSize` distinct queries (burst guard).
-- **Time** — every `flushIntervalMs` (so quiet traffic still lands promptly).
+- **Size**: buffer reaches `maxBatchSize` distinct queries (burst guard).
+- **Time**: every `flushIntervalMs` (so quiet traffic still lands promptly).
 
-**Trade-off — data-loss risk (discussed honestly).** Buffered increments live in
+**Trade-off: data-loss risk (discussed honestly).** Buffered increments live in
 memory. If the process crashes before a flush, those increments are **lost**. We
 accept this because the data is approximate popularity counts (not money), and
 the window is bounded (~2s). For durability we'd first append each increment to
-a **write-ahead log (WAL)** on disk, then batch into the DB — trading a little
+a **write-ahead log (WAL)** on disk, then batch into the DB: trading a little
 latency for crash safety. On a clean shutdown (Ctrl-C) we flush the buffer so
 nothing is lost.
 
@@ -301,12 +301,12 @@ nothing is lost.
 
 **File:** `src/trending.js`
 
-The spec wants the **same suggestion API** to support two rankings — recency is
+The spec wants the **same suggestion API** to support two rankings: recency is
 folded *into* `/suggest`, not bolted on as a separate feature:
 
-- **Basic (rubric 60%):** `GET /suggest?q=<prefix>&rank=basic` — sort the prefix
+- **Basic (rubric 60%):** `GET /suggest?q=<prefix>&rank=basic`: sort the prefix
   matches by **overall count**. Historically popular queries appear first.
-- **Enhanced (rubric 20%):** `GET /suggest?q=<prefix>&rank=enhanced` — re-rank
+- **Enhanced (rubric 20%):** `GET /suggest?q=<prefix>&rank=enhanced`: re-rank
   the same matches with a **recency-aware** score, so a query that's hot *right
   now* gets higher priority. The UI uses `rank=enhanced` by default.
 
@@ -314,7 +314,7 @@ folded *into* `/suggest`, not bolted on as a separate feature:
 > spark on it (heat up). Left alone it cools on its own. A query searched a lot
 > in the last few minutes is white-hot; one popular last week has cooled.
 
-The spec asks us to clearly explain five things — here they are:
+The spec asks us to clearly explain five things, here they are:
 
 **1) How recent searches are tracked.** One number per query, its **heat**. On
 each search (applied per batch flush):
@@ -325,7 +325,7 @@ where  decay(dt) = 0.5 ^ (dt / halfLife)      // halfLife = 10 min
        increment = sqrt(searchesInThisBatch)  // dampened, see #3
 ```
 
-Heat is "cooled" lazily — we only apply decay the next time we touch the query,
+Heat is "cooled" lazily, we only apply decay the next time we touch the query,
 so there's **no background job** sweeping millions of rows.
 
 **2) How recent activity affects ranking.** `rankByRecency()` re-ranks a
@@ -341,14 +341,14 @@ strict, safe **superset** of basic. A recently-hot query gets a boost
 proportional to how hot it is.
 
 **3) How short-term spikes are prevented from permanently over-ranking.** Two
-things: (a) **decay** — a spike's heat fades back to ~0 once searches stop, so
+things: (a) **decay**: a spike's heat fades back to ~0 once searches stop, so
 the ranking returns to count order on its own; (b) we **multiply by the query's
-own count**, so a quick burst on an obscure query can't top the list — it has to
+own count**, so a quick burst on an obscure query can't top the list: it has to
 be *both* reasonably popular *and* recently active. (`record()` also softens big
 bursts with a `√N` increment, an optional extra dampener.)
 
 **4) How the cache is updated/invalidated when rankings change.** The cache
-stores the **stable, count-ranked candidate pool** for a prefix — it changes
+stores the **stable, count-ranked candidate pool** for a prefix: it changes
 only when *counts* change, and we invalidate exactly the affected prefixes on
 each batch flush. Enhanced re-ranking runs **live on that cached pool**, so
 recency drift (heat decaying between flushes) needs **no cache invalidation at
@@ -357,12 +357,12 @@ all**. This cleanly separates "what to cache" (stable counts) from "how to rank"
 
 **5) Trade-offs (freshness / latency / complexity).** The **half-life** is the
 dial: a shorter half-life = fresher but jumpier, longer = more stable. Latency
-cost is tiny — enhanced sorts only the ~20-item cached pool per request, so reads
+cost is tiny, enhanced sorts only the ~20-item cached pool per request, so reads
 stay sub-millisecond. Complexity is bounded by the pool size: enhanced can only
 promote a query that's *both* reasonably popular and recently active, which is
 also a sensible product rule (it won't surface a single-search nobody-query).
 
-**Supporting demo — `GET /trending?mode=basic|enhanced`.** A small global
+**Supporting demo: `GET /trending?mode=basic|enhanced`.** A small global
 leaderboard that visualizes the *same two philosophies* (all-time count vs.
 decayed heat). It's the quickest way to "demonstrate the difference between the
 two ranking approaches using sample data" that the spec asks for, alongside the
@@ -395,7 +395,7 @@ We record each request's latency per route and report **percentiles**.
 
 **Why p95, not the average?** Averages hide pain. If 95 requests take 1 ms and 5
 take 900 ms, the average (~46 ms) looks fine while 1 in 20 users waits almost a
-second. **p95 = "95% of requests are at least this fast"** — it captures the
+second. **p95 = "95% of requests are at least this fast"**: it captures the
 experience of your *unlucky* users, which is what actually drives complaints.
 
 > **Analogy.** A bus that's "on average" on time can still strand you every
@@ -411,13 +411,13 @@ ratio, and the consistent-hashing ring distribution + change log.
 | Decision | Why | Trade-off / alternative |
 |---|---|---|
 | **Node.js + Express, single process** | One language end-to-end; trivial local setup (a grading criterion) | Not horizontally scaled; real deploy would run multiple instances |
-| **Vanilla HTML/CSS/JS frontend** | No build step — open and run | No component framework; fine for this scope |
+| **Vanilla HTML/CSS/JS frontend** | No build step: open and run | No component framework; fine for this scope |
 | **In-process "distributed" cache** | Makes consistent hashing real and *observable* without a Redis cluster | Not a real network cache; same API shape, easy to swap for Redis |
 | **Trie with per-node top-K** | O(prefix length) lookups, independent of dataset size | Extra memory for cached lists; refresh cost on writes (bounded to one path) |
 | **Cache-aside (not write-through)** | Simple, and writes are already batched | First request after invalidation is a miss |
 | **Batch writes** | Cuts DB writes massively (300× in bench) | Up to ~2s of increments at risk on crash (mitigated by WAL in production) |
 | **Exponential decay for trending** | One number per query, no background job, naturally recency-weighted | Half-life must be tuned to the product |
-| **FNV-1a hash** | Fast, good spread, deterministic | Not cryptographic — not needed here |
+| **FNV-1a hash** | Fast, good spread, deterministic | Not cryptographic: not needed here |
 | **Generated dataset** | Reproducible, offline, shaped Zipf-like | Synthetic, not real traffic |
 
 ---
@@ -426,8 +426,8 @@ ratio, and the consistent-hashing ring distribution + change log.
 
 ### `GET /suggest?q=<prefix>&rank=basic|enhanced`
 Returns up to 10 suggestions for a prefix.
-- `rank=basic` (default) — sorted by **count** descending.
-- `rank=enhanced` — **recency-aware** re-ranking (see §6). The UI uses this.
+- `rank=basic` (default), sorted by **count** descending.
+- `rank=enhanced`, **recency-aware** re-ranking (see §6). The UI uses this.
 ```bash
 curl 'http://localhost:3000/suggest?q=ip'                 # basic (count)
 curl 'http://localhost:3000/suggest?q=ip&rank=enhanced'   # recency-aware
@@ -469,10 +469,10 @@ The full performance report: latency percentiles, cache stats, DB reads/writes,
 batch-write stats, and consistent-hashing ring info + change log.
 
 ### Admin / demo helpers
-- `POST /admin/flush` — force the write buffer to flush now.
-- `POST /admin/cache-node` `{"action":"add"|"remove","id":"cache-3"}` — add/remove
+- `POST /admin/flush`, force the write buffer to flush now.
+- `POST /admin/cache-node` `{"action":"add"|"remove","id":"cache-3"}`, add/remove
   a cache node at runtime to demonstrate ring elasticity.
-- `POST /admin/snapshot` — persist current counts to `data/snapshot.csv`.
+- `POST /admin/snapshot`, persist current counts to `data/snapshot.csv`.
 
 ---
 
@@ -495,7 +495,7 @@ All knobs are at the top of `src/server.js` (`CONFIG`):
 ## Performance report
 
 Measured locally on Node 22 (`npm run bench`: 5,000 reads + 3,000 writes). Run
-it yourself to reproduce — numbers will vary by machine.
+it yourself to reproduce, numbers will vary by machine.
 
 | Metric | Value |
 |---|---|
@@ -509,7 +509,7 @@ it yourself to reproduce — numbers will vary by machine.
 | Ring points (3 nodes × 150) | 450, evenly distributed |
 
 *(Hit rate is high here because the benchmark hammers a small set of hot
-prefixes — which is exactly the real-world traffic pattern caches are built for.)*
+prefixes, which is exactly the real-world traffic pattern caches are built for.)*
 
 ---
 
@@ -551,9 +551,9 @@ prefixes — which is exactly the real-world traffic pattern caches are built fo
   a curated set of real flagship queries (`"iphone 15 pro"`, `"airpods"`, …);
 - assigns **Zipf-like** counts (the *n*-th most popular query gets ≈ `1/n` of the
   top query's traffic) because real search traffic is heavily skewed toward a few
-  head terms — which is what makes caching and trending behave realistically;
+  head terms, which is what makes caching and trending behave realistically;
 - is **deterministic** (fixed seed) so everyone gets the same file.
 
 If you'd rather use a real dataset, drop any `query,count` CSV at
 `data/queries.csv`. If a dataset has no counts, aggregate duplicates to derive
-them — `store.loadCSV` already sums repeated queries.
+them, `store.loadCSV` already sums repeated queries.
