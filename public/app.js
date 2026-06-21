@@ -175,9 +175,9 @@ async function loadTrending() {
   } catch { /* trending is non-critical; ignore errors */ }
 }
 
-document.querySelectorAll('.toggle button').forEach((btn) => {
+document.querySelectorAll('.segmented button').forEach((btn) => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.toggle button').forEach((b) => b.classList.remove('active'));
+    document.querySelectorAll('.segmented button').forEach((b) => b.classList.remove('active'));
     btn.classList.add('active');
     trendingMode = btn.dataset.mode;
     loadTrending();
